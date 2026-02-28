@@ -1,0 +1,14 @@
+id: reactbot
+name: React Bot
+author: Southclaws
+description: React to every new thread reply with a fire emoji.
+version: 1.0.0
+# NOTE: plugins are not currently cross-platform, most real targets are Linux servers, but for development, target your own OS
+command: "./reactbot.exe"
+events_consumed:
+  - EventThreadReplyCreated
+access:
+  handle: reactbot
+  name: React Bot
+  permissions:
+    - CREATE_REACTION
