@@ -29,6 +29,15 @@ Before starting, ensure you have:
 2. Access to a running Storyden instance (local or remote)
 3. Admin access to the Storyden instance (Admin -> Plugins)
 4. Basic Go knowledge
+5. The `sd` CLI installed and authenticated (see storyden-cli skill)
+
+The `sd` CLI (`sd plugin --help`) is the primary tool for scaffolding, running, packaging, installing, and managing plugins. Always consult the installed CLI for authoritative flag and argument docs:
+
+```bash
+sd plugin --help
+sd plugin dev --help
+sd plugin dev run --help
+```
 
 ## Quick Start: Build a Simple Plugin
 
@@ -36,7 +45,15 @@ This quick start builds a minimal plugin that reacts to new thread replies with 
 
 ### Step 1: Set up a new plugin project
 
-Start from a fresh, empty directory:
+Scaffold with the `sd` CLI (creates `manifest.yaml` pre-filled with sane defaults):
+
+```bash
+sd plugin dev new reactbot
+cd reactbot
+go mod init example.com/reactbot
+```
+
+Or start from a fresh, empty directory manually:
 
 ```bash
 mkdir reactbot
@@ -153,43 +170,89 @@ go mod tidy
 
 ### Step 4: Run as external plugin (development)
 
-External mode gives the fastest edit-run-debug loop.
-
-1. In Storyden, open Admin -> Plugins
-2. Add a plugin in **External** mode
-3. Paste `manifest.yaml`
-4. Copy the `STORYDEN_RPC_URL=...` value from the plugin's Connection tab
-5. Run your plugin:
+`sd plugin dev run` handles external plugin registration and injects `STORYDEN_RPC_URL` automatically — no manual UI steps required:
 
 ```bash
-export STORYDEN_RPC_URL='ws://localhost:8000/rpc?token=...'
-go run .
+sd plugin dev run
 ```
 
-### Step 5: Package for supervised runtime
+It reads `manifest.yaml`, registers or updates the plugin as an external plugin on the current instance, then executes the manifest's `command` with `STORYDEN_RPC_URL` set.
 
-1. Build for the OS/architecture where Storyden runs:
+To override the manifest command (e.g. run with `go run .` during development):
+
+```bash
+sd plugin dev run -- go run .
+```
+
+Useful flags:
+- `--manifest/-m <path>` — path to manifest YAML (default: `manifest.yaml`)
+- `--no-update` — skip updating the existing external plugin manifest before running
+- `--instance-id <id>` — target a specific existing plugin installation
+
+### Step 5: Package and install as supervised plugin
+
+**Validate** the manifest and package structure before distributing:
+
+```bash
+sd plugin dev validate
+```
+
+**Install directly** to the connected Storyden instance (builds the package and uploads it in one step):
+
+```bash
+sd plugin dev install
+```
+
+If a supervised plugin with the same manifest `id` already exists it is updated in place; otherwise a new one is created. Use `--dir` if your project is not in the current directory.
+
+To produce a portable zip for manual distribution instead:
+
+```bash
+sd plugin dev package
+# or specify an output path:
+sd plugin dev package --output reactbot.zip
+```
+
+The zip contains `manifest.json` (converted from `manifest.yaml`) and the binary. If you need to cross-compile first:
 
 ```bash
 export CGO_ENABLED=0
 export GOOS=linux
 export GOARCH=amd64
 go build -o reactbot main.go
+sd plugin dev package --output reactbot.zip
 ```
 
-2. Convert manifest YAML to JSON:
+If target host is Windows, build `reactbot.exe` and set manifest `command` to `./reactbot.exe`.
+
+## Managing Installed Plugins with sd
+
+All plugin management commands use a `<plugin-instance-id>` which is the UUID assigned when the plugin is registered. Use `sd plugin list` or `sd plugin get` to find it.
 
 ```bash
-yq -o=json manifest.yaml > manifest.json
+# List all plugins on the current instance
+sd plugin list
+sd plugin list --format json
+sd plugin list --wide          # includes version and description columns
+
+# Inspect a specific plugin
+sd plugin get <plugin-instance-id>
+
+# Start / stop supervised plugins
+sd plugin activate <plugin-instance-id>
+sd plugin deactivate <plugin-instance-id>
+
+# Stream live logs from a supervised plugin
+sd plugin logs <plugin-instance-id>
+
+# Delete a plugin
+sd plugin delete <plugin-instance-id>
+
+# Rotate the static RPC token for an external plugin
+sd plugin token rotate <plugin-instance-id>
 ```
 
-3. Create archive:
-
-```bash
-zip reactbot.zip manifest.json reactbot
-```
-
-If target host is Windows, build `reactbot.exe`, set manifest `command` to `./reactbot.exe`, and archive that `.exe` instead.
+> Always run `sd plugin --help` or `sd plugin <subcommand> --help` to get the version-matched docs for your installed CLI.
 
 ## Event Handlers
 
